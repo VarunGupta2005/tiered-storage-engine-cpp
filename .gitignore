@@ -1,0 +1,12 @@
+# Build artifacts
+*.exe
+*.o
+*.obj
+
+# Runtime Data 
+wal.log.tmp
+disk_store/
+
+# IDE settings
+.vscode/
+.idea/
