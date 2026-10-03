@@ -14,11 +14,11 @@ private:
     // Ordered map of streams in RAM (Topic -> List of Events)
     std::map<std::string, std::vector<Event>> streams;
     
-public:
-    // Concurrency primitives
+    // Concurrency primitives (Encapsulated)
     mutable std::shared_mutex rwMutex;
     std::condition_variable_any cv;
 
+public:
     explicit EventBroker(std::shared_ptr<IEventLog> log);
     ~EventBroker() override = default;
 
@@ -26,4 +26,5 @@ public:
     void registerPlugin(std::shared_ptr<IProjector> plugin) override;
 
     std::vector<Event> consume(const std::string& topic);
+    std::vector<Event> consumeBlocking(const std::string& topic);
 };

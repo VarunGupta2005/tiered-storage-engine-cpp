@@ -47,3 +47,14 @@ std::vector<Event> EventBroker::consume(const std::string& topic) {
     }
     return {};
 }
+
+std::vector<Event> EventBroker::consumeBlocking(const std::string& topic) {
+    std::shared_lock<std::shared_mutex> lock(rwMutex);
+    
+    cv.wait(lock, [this, &topic]() {
+        auto it = streams.find(topic);
+        return it != streams.end() && !it->second.empty();
+    });
+
+    return streams.at(topic);
+}

@@ -19,16 +19,12 @@ int main() {
     broker.registerPlugin(kvCache);
     broker.registerPlugin(analytics);
 
-    // 3. Background Consumer Thread using std::condition_variable_any (0% CPU spin)
+    // 3. Background Consumer Thread using encapsulated blocking call
     std::thread consumer([&broker, &kvCache]() {
         std::cout << "[Consumer] Thread started. Sleeping until events arrive...\n";
         
-        std::shared_lock<std::shared_mutex> lock(broker.rwMutex);
-        
-        // Block the thread without burning CPU until an event arrives on "KV_UPDATE"
-        broker.cv.wait(lock, [&broker]{ 
-            return !broker.consume("KV_UPDATE").empty(); 
-        });
+        // Block the thread cleanly without burning CPU or causing deadlocks
+        auto events = broker.consumeBlocking("KV_UPDATE");
 
         std::cout << "[Consumer] Woke up! Checking state in O(1)...\n";
         std::cout << "State of 'user_123': " << kvCache->get("user_123") << "\n";
