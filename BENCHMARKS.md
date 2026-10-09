@@ -10,10 +10,10 @@ These tests were executed using `10,000` operations compiled with strict `g++ -O
 
 | Operation | Methodology | Time (10k ops) | Throughput (ops/sec) | Big-O Complexity |
 | :--- | :--- | :--- | :--- | :--- |
-| **Write** | The New Way (Append-Only Log) | 0.033s | **295,482** | `O(1)` (Sequential) |
-| **Write** | The Old Way (Random File I/O) | 8.097s | 1,234 | `O(1)` (Random Seek) |
-| **Read (Hit)** | The Hash Way (`unordered_map` + Bloom) | 0.002s | 3,927,729 | `O(1)` |
-| **Read (Hit)** | The Tree Way (`std::map` raw) | 0.001s | **8,218,277** | `O(log N)` |
+| **Write** | Append-Only Log | 0.033s | **295,482** | `O(1)` (Sequential) |
+| **Write** | Random File I/O | 8.097s | 1,234 | `O(1)` (Random Seek) |
+| **Read (Hit)** | Hash Map (`unordered_map` + Bloom) | 0.002s | 3,927,729 | `O(1)` |
+| **Read (Hit)** | Binary Tree (`std::map` raw) | 0.001s | **8,218,277** | `O(log N)` |
 | **Read (Miss)**| Bloom Filter Rejection | 0.001s | **5,523,031** | `O(1)` |
 
 ---
@@ -21,22 +21,22 @@ These tests were executed using `10,000` operations compiled with strict `g++ -O
 ## 💾 2. The Storage Layer (Writes)
 
 ### The 239x Speedup: Mechanical Sympathy
-The most staggering result is the difference between the **New Way** (295k ops/sec) and the **Old Way** (1.2k ops/sec). 
+The most staggering result is the difference between the **Append-Only Log** (295k ops/sec) and **Random File I/O** (1.2k ops/sec). 
 
-* **The Old Way (Random File Creation):** When creating a separate file for every key (or seeking to random offsets in a giant file), the Operating System incurs massive overhead. It must allocate file descriptors, update inodes, and physically move the disk head (on HDDs) or trigger random Flash Translation Layer blocks (on SSDs).
-* **The New Way (Append-Only Log):** By opening a single `events.log` file with `std::ios::app`, we achieve **Mechanical Sympathy**. The disk writes continuously to the end of the file. The OS aggressively batches these writes in the Page Cache and flushes them sequentially. This is the exact mechanism that allows distributed systems like Apache Kafka to achieve millions of writes per second on standard hardware.
+* **Random File I/O:** When creating a separate file for every key (or seeking to random offsets in a giant file), the Operating System incurs massive overhead. It must allocate file descriptors, update inodes, and physically move the disk head (on HDDs) or trigger random Flash Translation Layer blocks (on SSDs).
+* **Append-Only Log:** By opening a single `events.log` file with `std::ios::app`, we achieve **Mechanical Sympathy**. The disk writes continuously to the end of the file. The OS aggressively batches these writes in the Page Cache and flushes them sequentially. This is the exact mechanism that allows distributed systems like Apache Kafka to achieve millions of writes per second on standard hardware.
 
 ---
 
 ## ⚡ 3. In-Memory Lookups (Reads)
 
 ### The `O(1)` vs `O(log N)` Anomaly
-In computer science, `O(1)` Hash Maps are theoretically faster than `O(log N)` Binary Search Trees. However, in our benchmark, `std::map` (The Tree Way) outperformed the `KVCachePlugin` (The Hash Way) by a factor of 2x. 
+In computer science, `O(1)` Hash Maps are theoretically faster than `O(log N)` Binary Search Trees. However, in our benchmark, the raw `std::map` outperformed the `KVCachePlugin`'s Hash Map approach by a factor of 2x. 
 
 **Why did this happen?**
-1. **The Bloom Filter Overhead**: Our Hash Way is not a raw `std::unordered_map`. Every time `kvCache->get(key)` is called, the system mathematically calculates **three separate string hashes** (two for the Bloom Filter, one for the Hash Map). String hashing is CPU-intensive.
+1. **The Bloom Filter Overhead**: Our Hash Map approach is not a raw `std::unordered_map`. Every time `kvCache->get(key)` is called, the system mathematically calculates **three separate string hashes** (two for the Bloom Filter, one for the Hash Map). String hashing is CPU-intensive.
 2. **CPU Cache Locality**: At N = 10,000, the entire `std::map` easily fits inside the CPU's L2/L3 cache. Traversing the red-black tree (which just involves pointer jumping and fast string prefix comparisons) is mechanically faster for the CPU than calculating three complex mathematical hashes.
-3. **The Crossover Point**: If we scaled this benchmark to N = 100,000,000, the `std::map` tree would become too large for the CPU cache. Memory fetches from RAM would cause cache misses, and the `O(log N)` traversal would slow down drastically. At that scale, the `O(1)` Hash Map would effortlessly overtake the Tree Map.
+3. **The Crossover Point**: If we scaled this benchmark to N = 100,000,000, the `std::map` tree would become too large for the CPU cache. Memory fetches from RAM would cause cache misses, and the `O(log N)` traversal would slow down drastically. At that scale, the `O(1)` Hash Map would effortlessly overtake the Binary Tree.
 
 ---
 
